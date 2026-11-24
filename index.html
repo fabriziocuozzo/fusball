@@ -325,6 +325,8 @@ function rebuild(){
    if(!ms.some(m=>m.cid===p.client_id))ms.push({cid:p.client_id,t:Date.parse(p.giocata_il),obj:p.obiettivo,scarto:p.scarto,timer:p.timer_sec||null,dur:p.durata_sec,ga:p.gol_a,gb:p.gol_b,seq:p.sequenza_gol||"",mot:p.motivo_fine,el:false,A,B,coda:true})}
   else if(op.tipo==="giocatore"){const k=pk(op.nome,op.cognome);pl[k]=Object.assign(pl[k]||{attivo:true},{nome:op.nome,cognome:op.cognome,sopr:op.sopr||"",attivo:true})}
   else if(op.tipo==="attivo"){if(pl[op.key])pl[op.key].attivo=op.v}
+  else if(op.tipo==="modgioc"){const nk=pk(op.nome,op.cognome);if(pl[op.key]&&(nk===op.key||!pl[nk])){const o=pl[op.key];delete pl[op.key];pl[nk]=Object.assign(o,{nome:op.nome,cognome:op.cognome,sopr:op.sopr||""});
+   if(nk!==op.key)ms.forEach(m=>{m.A=m.A.map(x=>x===op.key?nk:x);m.B=m.B.map(x=>x===op.key?nk:x)})}}
   else{const m=ms.find(x=>x.cid===op.cid);if(m){if(op.tipo==="modifica"){m.ga=op.ga;m.gb=op.gb;m.seq=""}else if(op.tipo==="annulla")m.el=op.v;m.coda=true}}});
  ms.sort((a,b)=>a.t-b.t);S.pl=pl;S.partite=ms;
  const dl=$("#pl");clear(dl);Object.values(pl).filter(p=>p.attivo).sort((a,b)=>(a.cognome+a.nome).localeCompare(b.cognome+b.nome)).forEach(p=>dl.appendChild(h("option",{value:p.nome+" "+p.cognome})))}
@@ -351,6 +353,7 @@ async function runOp(op){
  if(op.tipo==="modifica"||op.tipo==="annulla"){
   const r=await fetchAll("partite?select=id&client_id=eq."+encodeURIComponent(op.cid));if(!r.length)throw Object.assign(new Error("partita non trovata"),{code:"mancante"});
   return op.tipo==="modifica"?rpc("modifica_partita",{p_token:tk,p_id:r[0].id,p_gol_a:op.ga,p_gol_b:op.gb}):rpc("annulla_partita",{p_token:tk,p_id:r[0].id,p_annulla:op.v})}
+ if(op.tipo==="modgioc"){const gs=await fetchAll("giocatori?select=id,nome,cognome");const g=gs.find(x=>pk(x.nome,x.cognome)===op.key);if(!g)throw Object.assign(new Error("giocatore non trovato"),{code:"mancante"});return rpc("modifica_giocatore",{p_token:tk,p_id:g.id,p_nome:op.nome,p_cognome:op.cognome,p_soprannome:op.sopr||null})}
  if(op.tipo==="attivo"){const gs=await fetchAll("giocatori?select=id,nome,cognome");const g=gs.find(x=>pk(x.nome,x.cognome)===op.key);if(!g)throw Object.assign(new Error("giocatore non trovato"),{code:"mancante"});return rpc("imposta_giocatore_attivo",{p_token:tk,p_id:g.id,p_attivo:op.v})}
 }
 async function sync(manual){
@@ -551,7 +554,14 @@ function schedaGiocatore(k,E,P,C,B){
   kv("Partite / vinte / perse",o.g+" / "+o.v+" / "+o.p),kv("Percentuale vittorie",pctOf(o)+"%"),kv("Miglior serie",String(o.best)),kv("Serie in corso",String(o.cur)),kv("ELO",String(Math.round(eloOf(E,k)))),kv("Gol fatti / subiti",o.gf+" / "+o.gs),
   kv("Miglior compagno",bw?nm(bw.best)+" ("+bw.bp+"%)":"servono "+CFG.MIN_COPPIA_PARTITE+" partite in coppia"),kv("Peggior compagno",bw&&bw.worst?nm(bw.worst)+" ("+bw.wp+"%)":"-"),
   h("div",{style:"margin-top:10px"},[...(B[k]||[])].map(b=>h("span",{class:"badge"},BADGES.find(x=>x[0]===b)[1]))),
-  h("div",{class:"acts"},!S.ro?h("button",{class:"btn sec w",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
+  h("div",{class:"acts"},!S.ro?h("button",{class:"btn sec w",onclick:()=>editGiocatore(k)},"Modifica"):null,!S.ro?h("button",{class:"btn sec w",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
+function editGiocatore(k){
+ const p=S.pl[k],n=h("input",{value:p.nome,autocomplete:"off","aria-label":"Nome"}),c=h("input",{value:p.cognome,autocomplete:"off","aria-label":"Cognome"}),s=h("input",{value:p.sopr||"",autocomplete:"off","aria-label":"Soprannome"}),e=h("div",{class:"err"});
+ modal(h("div",{},h("h3",{},"Modifica giocatore"),h("div",{class:"stack"},h("label",{class:"field"},"Nome",n),h("label",{class:"field"},"Cognome",c),h("label",{class:"field"},"Soprannome (facoltativo)",s)),e,
+  h("div",{class:"acts"},h("button",{class:"btn sec",onclick:closeModal},"Annulla"),h("button",{class:"btn",onclick:async()=>{
+   const nn=n.value.trim(),cc=c.value.trim();if(!nn||!cc){e.textContent="Inserisci nome e cognome";return}
+   const nk=pk(nn,cc);if(nk!==k&&S.pl[nk]){e.textContent="Esiste già un giocatore con questo nome";return}
+   await enqueue({tipo:"modgioc",key:k,nome:nn,cognome:cc,sopr:s.value.trim()});closeModal();toast("Giocatore modificato");render(true)}},"Salva"))))}
 
 /* ===================== Storico ===================== */
 function vStor(m){
