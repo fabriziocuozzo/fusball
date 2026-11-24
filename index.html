@@ -643,7 +643,7 @@ function vElo(m,all,ms){
  const order=ks.sort((a,b)=>E.r[b]-E.r[a]);
  function draw(){clear(leg);clear(wrap);
   order.forEach((k,i)=>leg.appendChild(h("button",{class:hid.has(k)?"off":"",onclick:()=>{hid.has(k)?hid.delete(k):hid.add(k);draw()}},h("i",{style:"background:"+ELOCOL(i)}),snm(k)+" "+Math.round(E.r[k]))));
-  const vis=order.filter(k=>!hid.has(k)),W=700,H=300,pl=44,pr=12,pt=12,pb=26;
+  const vis=order.filter(k=>!hid.has(k)),W=Math.max(300,Math.round(wrap.clientWidth||700)),H=W<500?280:300,pl=40,pr=12,pt=12,pb=26;
   let lo=1e9,hi=-1e9;vis.forEach(k=>E.hist[k].forEach(p=>{lo=Math.min(lo,p.r);hi=Math.max(hi,p.r)}));if(!vis.length){lo=CFG.ELO_START-20;hi=CFG.ELO_START+20}lo=Math.min(lo,CFG.ELO_START)-10;hi=Math.max(hi,CFG.ELO_START)+10;
   const n=ms.length-1,X=i=>pl+(n?i/n:0)*(W-pl-pr),Y=v=>pt+(hi-v)/(hi-lo)*(H-pt-pb);
   const NS="http://www.w3.org/2000/svg",el=(t,a,txt)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e};
