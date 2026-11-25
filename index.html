@@ -567,7 +567,15 @@ function schedaGiocatore(k,E,P,C,B){
   kv("Partite / vinte / perse",o.g+" / "+o.v+" / "+o.p),kv("Percentuale vittorie",pctOf(o)+"%"),kv("Miglior serie",String(o.best)),kv("Serie in corso",String(o.cur)),kv("ELO",String(Math.round(eloOf(E,k)))),kv("Gol fatti / subiti",o.gf+" / "+o.gs),
   kv("Miglior compagno",bw?nm(bw.best)+" ("+bw.bp+"%)":"servono "+CFG.MIN_COPPIA_PARTITE+" partite in coppia"),kv("Peggior compagno",bw&&bw.worst?nm(bw.worst)+" ("+bw.wp+"%)":"-"),
   h("div",{style:"margin-top:10px"},[...(B[k]||[])].map(b=>h("span",{class:"badge"},BADGES.find(x=>x[0]===b)[1]))),
-  h("div",{class:"acts"},can("giocatori")?h("button",{class:"btn sec",onclick:()=>editGiocatore(k)},"Modifica"):null,can("giocatori")?h("button",{class:"btn sec",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
+  h("div",{class:"acts"},can("giocatori")?h("button",{class:"btn sec",onclick:()=>editGiocatore(k)},"Modifica"):null,can("giocatori")?h("button",{class:"btn sec",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,can("utenti")?h("button",{class:"btn sec",onclick:()=>creaAccesso(k)},"Crea accesso"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
+function creaAccesso(k){
+ const p=S.pl[k],nome=h("input",{value:nm(k),autocomplete:"off","aria-label":"Nome utente"}),pin=h("input",{type:"password",inputmode:"numeric",maxlength:6,autocomplete:"new-password","aria-label":"PIN provvisorio"}),e=h("div",{class:"err"});
+ const gr=h("select",{"aria-label":"Gruppo"},["normale","lettura","admin"].map(g=>h("option",{value:g},GRUPPI[g])));
+ modal(h("div",{},h("h3",{},"Crea accesso per "+nm(k)),h("p",{class:"muted",style:"margin-bottom:12px"},"Comunica il PIN di persona: potrà cambiarlo da Impostazioni > Sicurezza."),
+  h("div",{class:"stack"},h("label",{class:"field"},"Nome con cui entra",nome),h("label",{class:"field"},"PIN provvisorio (4-6 cifre)",pin),h("label",{class:"field"},"Gruppo",gr)),e,
+  h("div",{class:"acts"},h("button",{class:"btn sec",onclick:closeModal},"Annulla"),h("button",{class:"btn",onclick:async()=>{
+   e.textContent="";const n=nome.value.trim();if(!n){e.textContent="Inserisci il nome";return}if(!/^[0-9]{4,6}$/.test(pin.value)){e.textContent=ERR.pin_non_valido;return}
+   try{await rpc("crea_utente",{p_token:S.token,p_nome:n,p_pin:pin.value,p_gruppo:gr.value});closeModal();toast("Accesso creato per "+n)}catch(x){if(!authErr(x))e.textContent=errMsg(x)}}},"Crea"))))}
 function editGiocatore(k){
  const p=S.pl[k],n=h("input",{value:p.nome,autocomplete:"off","aria-label":"Nome"}),c=h("input",{value:p.cognome,autocomplete:"off","aria-label":"Cognome"}),s=h("input",{value:p.sopr||"",autocomplete:"off","aria-label":"Soprannome"}),e=h("div",{class:"err"});
  modal(h("div",{},h("h3",{},"Modifica giocatore"),h("div",{class:"stack"},h("label",{class:"field"},"Nome",n),h("label",{class:"field"},"Cognome",c),h("label",{class:"field"},"Soprannome (facoltativo)",s)),e,
