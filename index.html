@@ -489,13 +489,16 @@ function render(keepScroll){
 
 /* ===================== Home ===================== */
 function trend(cur,prev,label){const d=cur-prev;return(d>=0?"+":"")+d+" vs mese scorso"}
+/* tutti quelli che condividono il valore migliore (massimo o minimo): a pari punteggio si e' tutti primi */
+const tiedBest=(ks,f,min)=>{if(!ks.length)return[];const v=ks.map(f),b=min?Math.min(...v):Math.max(...v);return ks.filter((k,i)=>Math.abs(v[i]-b)<1e-9)};
 function vHome(m){
  const ms=act(),E=calcElo(ms),{P,C}=stats(ms);
  const now=ymRome(Date.now()),pd=new Date();pd.setMonth(pd.getMonth()-1);const prev=ymRome(pd.getTime());
  const cnt=(ym)=>ms.filter(x=>ymRome(x.t)===ym),gol=a=>a.reduce((s,x)=>s+x.ga+x.gb,0);
  const mc=cnt(now),pc=cnt(prev);
- const lead=Object.keys(E.r).sort((a,b)=>E.r[b]-E.r[a])[0];
- const pairs=Object.keys(C).filter(k=>C[k].g>=CFG.MIN_COPPIA_PARTITE).sort((a,b)=>pctOf(C[b])-pctOf(C[a])||C[b].g-C[a].g);
+ const leaders=tiedBest(Object.keys(E.r),k=>Math.round(E.r[k]),false).sort((a,b)=>nm(a).localeCompare(nm(b)));
+ const pairsOk=Object.keys(C).filter(k=>C[k].g>=CFG.MIN_COPPIA_PARTITE).sort((a,b)=>pctOf(C[b])-pctOf(C[a])||C[b].g-C[a].g);
+ const topPairs=pairsOk.length?pairsOk.filter(k=>pctOf(C[k])===pctOf(C[pairsOk[0]])&&C[k].g===C[pairsOk[0]].g).sort((a,b)=>a.localeCompare(b)):[];
  const live=LS.get("fusball_live",null);
  if(live&&can("partite"))m.appendChild(h("div",{class:"card"},h("h4",{},"Partita in corso"),h("p",{class:"muted",style:"margin-bottom:12px"},live.A.map(snm).join(" + ")+"  "+goals(live.seq,"A")+"-"+goals(live.seq,"B")+"  "+live.B.map(snm).join(" + ")),h("button",{class:"btn",onclick:()=>resumeLive(live)},"Riprendi partita in corso")));
  const lastB=LS.get("fusball_backup",0);
@@ -503,8 +506,8 @@ function vHome(m){
  m.appendChild(h("div",{class:"kpis"},
   h("div",{class:"card"},h("span",{},"Partite"),h("b",{},String(ms.length)),h("em",{},trend(mc.length,pc.length))),
   h("div",{class:"card"},h("span",{},"Gol totali"),h("b",{},String(gol(ms))),h("em",{},trend(gol(mc),gol(pc)))),
-  h("div",{class:"card"},h("span",{},"Leader ELO"),h("b",{style:"font-size:18px"},lead?snm(lead):"-"),h("em",{},lead?Math.round(E.r[lead])+" punti":"")),
-  h("div",{class:"card"},h("span",{},"Coppia top"),h("b",{style:"font-size:16px;line-height:1.3"},pairs[0]?pairs[0].split(" + ").map(snm).join(" + "):"-"),h("em",{},pairs[0]?pctOf(C[pairs[0]])+"% su "+C[pairs[0]].g:"almeno "+CFG.MIN_COPPIA_PARTITE+" partite"))));
+  h("div",{class:"card"},h("span",{},"Leader ELO"),h("b",{style:"font-size:"+(leaders.length>1?"16":"18")+"px;line-height:1.3"},leaders.length?leaders.map(k=>h("div",{},snm(k))):"-"),h("em",{},leaders.length?Math.round(E.r[leaders[0]])+" punti"+(leaders.length>1?", a pari merito":""):"")),
+  h("div",{class:"card"},h("span",{},"Coppia top"),h("b",{style:"font-size:16px;line-height:1.3"},topPairs.length?topPairs.map(k=>h("div",{},k.split(" + ").map(snm).join(" + "))):"-"),h("em",{},topPairs.length?pctOf(C[topPairs[0]])+"% su "+C[topPairs[0]].g+(topPairs.length>1?", a pari merito":""):"almeno "+CFG.MIN_COPPIA_PARTITE+" partite"))));
  m.appendChild(h("div",{class:"grid2"},chiCeOggi(),sfidaCard(E,C)));
  m.appendChild(podioCard(ms));
  const lc=h("div",{class:"card"},h("h4",{},"Ultime partite"));
@@ -545,15 +548,15 @@ function podioCard(ms){
  c.appendChild(h("select",{"aria-label":"Mese",style:"margin-bottom:12px;max-width:100%",onchange:e=>{S.podioMese=e.target.value;render(true)}},mesi.map(y=>h("option",{value:y,selected:y===S.podioMese||null},ymLabel(y)))));
  const {P}=stats(ms.filter(x=>ymRome(x.t)===S.podioMese));const ks=Object.keys(P);
  if(!ks.length){c.appendChild(h("p",{class:"muted"},"Nessuna partita in questo mese"));return c}
- const top=ks.sort((a,b)=>P[b].v-P[a].v||pctOf(P[b])-pctOf(P[a])||P[a].g-P[b].g).slice(0,3);
- const pod=h("div",{class:"podio"});[1,0,2].forEach(i=>{const k=top[i];if(!k)return;pod.appendChild(h("div",{class:"p"+(i+1)},h("b",{},String(i+1)),snm(k),h("div",{class:"muted"},P[k].v+" vittorie su "+P[k].g)))});
+ const livelli=[...new Set(ks.map(k=>P[k].v))].filter(v=>v>0).sort((a,b)=>b-a).slice(0,3);   // a pari vittorie si sta sullo stesso gradino
+ const pod=h("div",{class:"podio"});[1,0,2].forEach(i=>{if(livelli[i]===undefined)return;const grp=ks.filter(k=>P[k].v===livelli[i]).sort((a,b)=>nm(a).localeCompare(nm(b)));pod.appendChild(h("div",{class:"p"+(i+1)},h("b",{},String(i+1)),grp.map(k=>h("div",{},snm(k))),h("div",{class:"muted"},livelli[i]+(livelli[i]===1?" vittoria":" vittorie"))))});
  c.appendChild(pod);
- const can=ks.slice().sort((a,b)=>P[b].gf-P[a].gf)[0];
- const muro=ks.filter(k=>P[k].g>=3).sort((a,b)=>P[a].gs/P[a].g-P[b].gs/P[b].g)[0];
- const MKm=calcMarc(ms.filter(x=>ymRome(x.t)===S.podioMese)),kg=Object.keys(MKm).filter(k=>MKm[k].gol>0).sort((a,b)=>MKm[b].gol-MKm[a].gol),ka=Object.keys(MKm).filter(k=>MKm[k].ag>0).sort((a,b)=>MKm[b].ag-MKm[a].ag);
- c.appendChild(h("div",{class:"row"},h("span",{},"Cannoniere"),h("b",{},kg.length?snm(kg[0])+" ("+MKm[kg[0]].gol+" gol)":snm(can)+" ("+P[can].gf+" gol di squadra)")));
- if(ka.length)c.appendChild(h("div",{class:"row"},h("span",{},"Autogol"),h("b",{},snm(ka[0])+" ("+MKm[ka[0]].ag+")")));
- c.appendChild(h("div",{class:"row"},h("span",{},"Muro"),h("b",{},muro?snm(muro)+" ("+(P[muro].gs/P[muro].g).toFixed(1)+" subiti a partita)":"servono 3 partite")));
+ const cans=tiedBest(ks,k=>P[k].gf,false),muri=tiedBest(ks.filter(k=>P[k].g>=3),k=>P[k].gs/P[k].g,true);
+ const lst=a=>a.slice().sort((x,y)=>nm(x).localeCompare(nm(y))).map(snm).join(", ");
+ const MKm=calcMarc(ms.filter(x=>ymRome(x.t)===S.podioMese)),kg=tiedBest(Object.keys(MKm).filter(k=>MKm[k].gol>0),k=>MKm[k].gol,false),ka=tiedBest(Object.keys(MKm).filter(k=>MKm[k].ag>0),k=>MKm[k].ag,false);
+ c.appendChild(h("div",{class:"row"},h("span",{},"Cannoniere"),h("b",{},kg.length?lst(kg)+" ("+MKm[kg[0]].gol+" gol)":lst(cans)+" ("+P[cans[0]].gf+" gol di squadra)")));
+ if(ka.length)c.appendChild(h("div",{class:"row"},h("span",{},"Autogol"),h("b",{},lst(ka)+" ("+MKm[ka[0]].ag+")")));
+ c.appendChild(h("div",{class:"row"},h("span",{},"Muro"),h("b",{},muri.length?lst(muri)+" ("+(P[muri[0]].gs/P[muri[0]].g).toFixed(1)+" subiti a partita)":"servono 3 partite")));
  return c}
 
 /* ===================== Giocatori ===================== */
