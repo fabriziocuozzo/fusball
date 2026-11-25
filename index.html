@@ -461,7 +461,8 @@ function statusChip(){const n=S.queue.length;
  if(n)return h("span",{class:"chip",id:"stchip"},n+" da sincronizzare");
  return h("span",{id:"stchip"})}
 function updateStatus(){const c=$("#stchip");if(c)c.replaceWith(statusChip())}
-const TITLES={home:["Fusball","Calcio balilla 2 contro 2"],gioc:["Giocatori",""],stor:["Storico",""],stat:["Statistiche",""],set:["Impostazioni",""],nuova:["Nuova partita","Quattro giocatori, regole e via"]};
+const SLOGAN=["Dove le amicizie finiscono 10 a 9.","Qui il talento si misura in gol. L'ego, purtroppo, no."];   // una a caso a ogni apertura
+const TITLES={home:["Fusball",rnd(SLOGAN)],gioc:["Giocatori",""],stor:["Storico",""],stat:["Statistiche",""],set:["Impostazioni",""],nuova:["Nuova partita","Quattro giocatori, regole e via"]};
 function render(keepScroll){
  if(!main)return;const y=main.scrollTop;clear(main);
  const r=S.route,t=TITLES[r.m]||TITLES.home;
