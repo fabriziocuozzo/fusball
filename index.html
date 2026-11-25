@@ -747,6 +747,7 @@ function finish(mot){
  const nmA=G.A.map(snm).join(" + "),nmB=G.B.map(snm).join(" + ");
  modal(h("div",{style:"text-align:center"},h("div",{class:"muted"},MOTIVI[mot]),h("div",{class:"big"},A+" - "+B),
   h("div",{style:"font-weight:700;margin-bottom:6px;color:"+(winA?BLU:ROS)},"Vince "+(winA?nmA:nmB)),
+  h("div",{class:"muted",style:"font-style:italic;margin:0 0 6px"},fraseMatch(matchObj(mot))),
   h("div",{class:"acts",style:"flex-direction:column"},
    h("button",{class:"btn",onclick:()=>saveMatch(mot)},"Salva partita"),
    h("button",{class:"btn sec",onclick:()=>shareImg(matchObj(mot))},icon("share",16),"Condividi risultato"),
@@ -767,6 +768,30 @@ document.addEventListener("keydown",e=>{
  else if(e.code==="Digit2"||e.code==="Numpad2"){goal("B",e.shiftKey?-1:1);e.preventDefault()}
  else if(e.key==="Escape")$("#mx").click()});
 
+/* ===================== Frasi del risultato ===================== */
+const FRASI={
+ cappotto:["{P} hanno visto il pallone solo in foto.","Cappotto: a {P} ora serve anche la sciarpa.","Zero gol. Ma tanta, tanta partecipazione.","Il risultato più onesto: {P} non c'erano."],
+ netta:["Non è stata una partita, è stata una dimostrazione.","{V} giocavano a calcio balilla. {P} a un altro sport.","A {P} consigliamo di ripassare le regole.","Pietà per i vinti. Poca, ma pietà.","{P}: ci hanno provato. Si fa per dire."],
+ combattuta:["Si decide all'ultimo gol, si discute per tre giorni.","Vittoria di misura. Le scuse, di lunghezza.","Un gol di differenza e dieci minuti di moviola.","Tensione, sudore e già pronta la rivincita.","{P}: sfortuna, arbitro e polvere sull'asta."],
+ normale:["{V} vincono. {P} commentano.","La storia la scrivono i vincitori. I perdenti scrivono i commenti.","Che partita! Almeno per chi ha vinto.","{P}: la prossima volta si gioca a carte.","Tutto previsto, tranne la faccia di {P}.","{V} in trionfo, {P} in analisi."],
+ golden:["Golden goal: la morte improvvisa, la gloria pure.","Allo scadere del tempo vince chi ha più cuore. O più fortuna.","Il tempo è scaduto. Le scuse no.","Finale thriller, applausi e qualche brivido."],
+ rimonta:["Rimonta! {P} avevano già ordinato da bere.","Dal baratro alla gloria: {V} non mollano mai.","Sotto di quattro e hanno vinto. {P} dormono poco stanotte."],
+ generica:["Fusball: dove non esistono innocenti.","Un'altra pagina di storia, scritta con il polso.","Foto e risultato: la prova che serviva."]};
+function hashStr(s){let x=0;for(let i=0;i<s.length;i++)x=(x*31+s.charCodeAt(i))>>>0;return x}
+function nomiSq(m,sq){const o=sq==="A"?0:2;if(m.names)return m.names.slice(o,o+2).map(n=>n.nome+" "+n.cognome.charAt(0)+".").join(" + ");return(sq==="A"?m.A:m.B).map(snm).join(" + ")}
+function fraseMatch(m){
+ const win=m.ga>m.gb?"A":"B",ws=win==="A"?m.ga:m.gb,ls=win==="A"?m.gb:m.ga,d=ws-ls;
+ let cat;
+ if(ls===0)cat="cappotto";
+ else if(rimonta(m,win))cat="rimonta";
+ else if(m.mot==="golden"||m.mot==="timer")cat="golden";
+ else if(d>=CFG.BADGE.DOMINIO_SCARTO)cat="netta";
+ else if(d<=2)cat="combattuta";
+ else cat="normale";
+ const hh=hashStr(String(m.cid||m.t)),pool=hh%4===0?FRASI.generica:FRASI[cat];   // una volta su quattro una frase generica
+ return pool[Math.floor(hh/4)%pool.length].replace(/\{V\}/g,nomiSq(m,win)).replace(/\{P\}/g,nomiSq(m,win==="A"?"B":"A"))}
+function wrapText(c,t,maxW){const w=t.split(" "),L=[];let cur="";for(const x of w){const tt=cur?cur+" "+x:x;if(c.measureText(tt).width>maxW&&cur){L.push(cur);cur=x}else cur=tt}if(cur)L.push(cur);return L}
+
 /* ===================== Condividi risultato (PNG 1080x1080) ===================== */
 async function shareImg(m){
  const cv=document.createElement("canvas");cv.width=cv.height=1080;const c=cv.getContext("2d");
@@ -777,7 +802,10 @@ async function shareImg(m){
   c.fillStyle="#14212E";c.font="600 38px system-ui,sans-serif";names.forEach((n,i)=>c.fillText(n,x+230,790+i*50))};
  const full=k=>m.names?(()=>{const i=[...m.A,...m.B].indexOf(k);return m.names[i]?m.names[i].nome+" "+m.names[i].cognome:nm(k)})():nm(k);
  box(60,BLU,m.ga,m.A.map(full));box(560,ROS,m.gb,m.B.map(full));
- c.fillStyle="#6B7A8A";c.font="400 32px system-ui,sans-serif";c.textAlign="center";c.fillText(fmtD(m.t)+" · "+rule(m),540,1010);
+ c.textAlign="center";c.fillStyle="#185FA5";let fs=36;c.font="italic 600 "+fs+"px system-ui,sans-serif";let lines=wrapText(c,fraseMatch(m),940);
+ if(lines.length>3){fs=30;c.font="italic 600 "+fs+"px system-ui,sans-serif";lines=wrapText(c,fraseMatch(m),940)}
+ lines.slice(0,3).forEach((l,i)=>c.fillText(l,540,915+i*(fs+8)));
+ c.fillStyle="#6B7A8A";c.font="400 28px system-ui,sans-serif";c.fillText(fmtD(m.t)+" · "+rule(m),540,1050);
  const blob=await new Promise(r=>cv.toBlob(r,"image/png"));
  const file=new File([blob],"fusball-risultato.png",{type:"image/png"});
  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"Fusball"});return}}catch(e){if(e&&e.name==="AbortError")return}
