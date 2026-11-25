@@ -1,5 +1,5 @@
-/* Fusball service worker v1.0 - cache-first per la shell, rete diretta per Supabase */
-var APP_VERSION = "1.0";
+/* Fusball service worker v2.0 - cache-first per la shell, rete diretta per Supabase */
+var APP_VERSION = "2.0";
 var CACHE = "fusball-" + APP_VERSION;
 var SHELL = ["./", "index.html", "config.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", function (e) {

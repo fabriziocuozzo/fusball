@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!--
-  Fusball v1.0 - 24/11/2026
+  Fusball v2.0 - 25/11/2026
   Calcio balilla 2 contro 2: tabellone, giocatori, storico, statistiche, ELO, badge, sfida del giorno.
   Autore: Fabrizio - Licenza CC BY-NC-ND
   CHANGELOG
+  v2.0 (25/11/2026) utenti con nome e PIN, gruppi di permessi (admin, normale, solo lettura), partita con autore, finestra di correzione di 3 minuti.
   v1.0 (24/11/2026) prima versione: PIN e ospite, tabellone, giocatori, storico, statistiche (persone, coppie, record, ELO, badge),
        sfida del giorno, squadre casuali, podio del mese, condividi risultato, export CSV/PDF/JSON, coda offline, PWA.
 -->
@@ -11,7 +12,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Fusball v1.0</title>
+<title>Fusball v2.0</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -121,7 +122,7 @@ input[type=range]{padding:0;border:0;height:auto;accent-color:var(--ac)}
 .mc .d{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap}
 .mc .t{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:2px 0}
 .mc .t b{font-size:18px}
-.mc .t.w{font-weight:700}
+.mc .t.win{font-weight:700}
 .mc.del{opacity:.55}
 .mc .ex{display:none;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
 .mc.open .ex{display:flex}
@@ -184,6 +185,7 @@ input[type=range]{padding:0;border:0;height:auto;accent-color:var(--ac)}
 #login h1{font-size:24px;margin-bottom:4px;color:#185FA5}
 #login p{color:#6B7A8A;font-size:13px;margin-bottom:16px}
 #login input{width:100%;text-align:center;font-size:24px;letter-spacing:8px;margin-bottom:8px;background:#fff;color:#14212E;border:1px solid #DCE4EC}
+#login input#nome{font-size:18px;letter-spacing:0}
 #login .btn{width:100%;margin-top:8px;background:#185FA5}
 #login .btn.sec{background:#fff;color:#185FA5;border-color:#DCE4EC}
 /* toast e modali */
@@ -213,7 +215,7 @@ input[type=range]{padding:0;border:0;height:auto;accent-color:var(--ac)}
 .q .mn{position:absolute;bottom:12px;right:12px;width:56px;height:44px;border-radius:12px;background:rgba(255,255,255,.25);font-size:16px;display:flex;align-items:center;justify-content:center}
 .gg{background:#FFF3CD;color:#7A5B00;border-radius:8px;padding:2px 10px;font-size:13px;font-weight:700}
 #merr{color:#fecaca;text-align:center;font-size:13px;min-height:0;padding:0 8px}
-body.ro .w{display:none!important}
+body:not(.c-partite) [data-n=partite],body:not(.c-storico) [data-n=storico],body:not(.c-giocatori) [data-n=giocatori],body:not(.c-utenti) [data-n=utenti],body:not(.c-login) [data-n=login]{display:none!important}
 #print{display:none}
 #upd{display:none}
 @media print{
@@ -229,7 +231,8 @@ body.ro .w{display:none!important}
 <div id="stage"></div>
 <div id="login" style="display:none"><div class="box">
  <img src="icons/icon.svg" alt="">
- <h1>Fusball</h1><p>Inserisci il PIN per segnare le partite</p>
+ <h1>Fusball</h1><p>Entra con il tuo nome e il tuo PIN</p>
+ <input id="nome" type="text" autocomplete="username" placeholder="Nome e cognome" aria-label="Nome e cognome">
  <input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" aria-label="PIN">
  <div class="err" id="pinerr" style="display:none"></div>
  <button class="btn" id="pinok">Entra</button>
@@ -244,7 +247,7 @@ body.ro .w{display:none!important}
 <script src="config.js"></script>
 <script>
 "use strict";
-const APP_VERSION="1.0",APP_DATE="24/11/2026";
+const APP_VERSION="2.0",APP_DATE="25/11/2026";
 const CFG=window.FUSBALL;
 const BLU="#185FA5",ROS="#E24B4A";
 
@@ -309,20 +312,27 @@ async function fetchAll(path){
  return out}
 
 /* ===================== stato ===================== */
-const S={token:LS.get("fusball_token",null),ro:false,srv:{giocatori:[],partite:[]},queue:[],pl:{},partite:[],route:{m:"home",s:null},
+const S={token:LS.get("fusball_token",null),profilo:LS.get("fusball_profilo",null),ro:false,srv:{giocatori:[],partite:[]},queue:[],pl:{},partite:[],route:{m:"home",s:null},
  online:navigator.onLine,syncing:false,setup:null,per:"sempre",statSub:"Persone",open:null};
 const gen=()=>Object.assign({obj:10,scarto:2,timer:0,vib:true,wake:true},LS.get("fusball_gen",{}));
 function newSetup(){const g=gen();return{obj:g.obj,scarto:g.scarto,timer:g.timer,slots:["","","",""]}}
 S.setup=newSetup();
 
+const can=p=>!S.ro&&!!(S.profilo&&S.profilo.permessi&&S.profilo.permessi[p]);
+const GRUPPI={admin:"Amministratore",normale:"Normale",lettura:"Solo lettura"};
+function setBody(){const b=document.body.classList;b.toggle("ro",S.ro);["partite","storico","giocatori","utenti"].forEach(p=>b.toggle("c-"+p,can(p)));b.toggle("c-login",!S.ro&&!!S.token&&!!S.profilo)}
+function canCorreggi(x){if(can("storico"))return true;const rm=(S.profilo&&S.profilo.permessi&&S.profilo.permessi.recente_min)||0;return!S.ro&&rm>0&&!!x.aut&&x.aut===S.profilo.nome&&Date.now()-x.cr<rm*60000}
+const ERR={non_autorizzato:"Sessione scaduta, rientra con nome e PIN",permesso_negato:"Non hai il permesso per questa operazione",troppi_tentativi:"Troppi tentativi, riprova tra 10 minuti",utente_esistente:"Esiste già un utente con questo nome",pin_non_valido:"Il PIN deve avere da 4 a 6 cifre",serve_un_admin:"Deve restare almeno un amministratore attivo",giocatore_esistente:"Esiste già un giocatore con questo nome",giocatori_non_validi:"Nome o cognome non validi",nome_non_valido:"Inserisci un nome",pareggio_non_valido:"Il punteggio non può essere in parità"};
+const errMsg=e=>e.net?"Serve la connessione":(ERR[e.code]||e.message);
+function authErr(e){if(e.code==="non_autorizzato"){S.token=null;S.profilo=null;LS.del("fusball_token");LS.del("fusball_profilo");showLogin(ERR.non_autorizzato);return true}return false}
 function fromSrv(r){const A=[],B=[];(r.partite_giocatori||[]).forEach(x=>{const g=x.giocatori;if(g)(x.squadra==="A"?A:B).push(pk(g.nome,g.cognome))});
- return{cid:r.client_id,t:Date.parse(r.giocata_il),obj:r.obiettivo,scarto:r.scarto,timer:r.timer_sec,dur:r.durata_sec,ga:r.gol_a,gb:r.gol_b,seq:r.sequenza_gol||"",mot:r.motivo_fine,el:r.eliminata,A,B,coda:false}}
+ return{cid:r.client_id,t:Date.parse(r.giocata_il),obj:r.obiettivo,scarto:r.scarto,timer:r.timer_sec,dur:r.durata_sec,ga:r.gol_a,gb:r.gol_b,seq:r.sequenza_gol||"",mot:r.motivo_fine,el:r.eliminata,A,B,coda:false,aut:r.creata_da_nome||"",cr:Date.parse(r.creato_il)}}
 function rebuild(){
  const pl={};S.srv.giocatori.forEach(g=>{pl[pk(g.nome,g.cognome)]={nome:g.nome,cognome:g.cognome,sopr:g.soprannome||"",attivo:g.attivo,id:g.id}});
  let ms=S.srv.partite.map(fromSrv);
  S.queue.forEach(({v:op})=>{
   if(op.tipo==="salva"){const p=op.payload;const A=[],B=[];p.giocatori.forEach(g=>{const k=pk(g.nome,g.cognome);if(!pl[k])pl[k]={nome:g.nome,cognome:g.cognome,sopr:"",attivo:true};else pl[k].attivo=true;(g.squadra==="A"?A:B).push(k)});
-   if(!ms.some(m=>m.cid===p.client_id))ms.push({cid:p.client_id,t:Date.parse(p.giocata_il),obj:p.obiettivo,scarto:p.scarto,timer:p.timer_sec||null,dur:p.durata_sec,ga:p.gol_a,gb:p.gol_b,seq:p.sequenza_gol||"",mot:p.motivo_fine,el:false,A,B,coda:true})}
+   if(!ms.some(m=>m.cid===p.client_id))ms.push({cid:p.client_id,t:Date.parse(p.giocata_il),obj:p.obiettivo,scarto:p.scarto,timer:p.timer_sec||null,dur:p.durata_sec,ga:p.gol_a,gb:p.gol_b,seq:p.sequenza_gol||"",mot:p.motivo_fine,el:false,A,B,coda:true,aut:S.profilo?S.profilo.nome:"",cr:op.t||Date.now()})}
   else if(op.tipo==="giocatore"){const k=pk(op.nome,op.cognome);pl[k]=Object.assign(pl[k]||{attivo:true},{nome:op.nome,cognome:op.cognome,sopr:op.sopr||"",attivo:true})}
   else if(op.tipo==="attivo"){if(pl[op.key])pl[op.key].attivo=op.v}
   else if(op.tipo==="modgioc"){const nk=pk(op.nome,op.cognome);if(pl[op.key]&&(nk===op.key||!pl[nk])){const o=pl[op.key];delete pl[op.key];pl[nk]=Object.assign(o,{nome:op.nome,cognome:op.cognome,sopr:op.sopr||""});
@@ -345,7 +355,7 @@ async function refresh(){
  await loadQueue();rebuild()}
 
 /* coda: ogni scrittura va in coda e poi si sincronizza */
-async function enqueue(op){await idb("coda","readwrite",s=>s.add(op));await loadQueue();rebuild();updateStatus();sync()}
+async function enqueue(op){op.t=Date.now();await idb("coda","readwrite",s=>s.add(op));await loadQueue();rebuild();updateStatus();sync()}
 async function runOp(op){
  const tk=S.token;
  if(op.tipo==="salva")return rpc("salva_partita",{p_token:tk,p:op.payload});
@@ -366,8 +376,8 @@ async function sync(manual){
     if(it.v.tipo==="salva")logEv("partita","partita salvata "+it.v.payload.gol_a+"-"+it.v.payload.gol_b)}
    catch(e){
     if(e.net)break;
-    if(e.code==="non_autorizzato"){S.token=null;LS.del("fusball_token");logEv("accesso","sessione scaduta");showLogin("Sessione scaduta, inserisci di nuovo il PIN. Le partite in coda sono al sicuro.");break}
-    logEv("errore","sync "+it.v.tipo+": "+e.message);await idb("coda","readwrite",s=>s.delete(it.k));toast("Operazione rifiutata dal server: "+e.message,"err")}}
+    if(e.code==="non_autorizzato"){S.token=null;LS.del("fusball_token");logEv("accesso","sessione scaduta");S.profilo=null;LS.del("fusball_profilo");showLogin("Sessione scaduta, rientra con nome e PIN. Le partite in coda sono al sicuro.");break}
+    logEv("errore","sync "+it.v.tipo+": "+e.message);await idb("coda","readwrite",s=>s.delete(it.k));toast("Operazione rifiutata: "+errMsg(e),"err")}}
   await refresh();LS.set("fusball_lastsync",Date.now());
  }finally{S.syncing=false;updateStatus();if((S.token||S.ro)&&S.route.m!=="nuova")render(true)}
  if(manual)toast(done?"Sincronizzate "+done+" operazioni":"Niente da sincronizzare")}
@@ -416,7 +426,7 @@ const MENU=[
  {id:"gioc",label:"Giocatori",icon:"users",sub:null},
  {id:"stor",label:"Storico",icon:"clock",sub:null},
  {id:"stat",label:"Statistiche",icon:"chart",sub:["Persone","Coppie","Record","ELO","Badge"]},
- {id:"set",label:"Impostazioni",icon:"gear",bottom:true,sub:["Aspetto","Generali","Sincronizzazione","Esporta","Sicurezza","Credits","Log","Help","Changelog"]}
+ {id:"set",label:"Impostazioni",icon:"gear",bottom:true,sub:["Aspetto","Generali","Sincronizzazione","Esporta","Sicurezza","Utenti","Credits","Log","Help","Changelog"]}
 ];
 const BNAV=[["home","Home","home"],["gioc","Giocatori","users"],["stor","Storico","clock"],["stat","Statistiche","chart"],["set","Altro","gear"]];
 let root,main;
@@ -429,7 +439,7 @@ function buildShell(){
   li.appendChild(h("button",{class:"mi","data-m":m.id,onclick:()=>{if(m.sub){const wasOpen=li.classList.contains("open");nav.querySelectorAll("li.open").forEach(x=>x.classList.remove("open"));li.classList.add("open");if(wasOpen&&S.route.m===m.id)return;go(m.id,(S.route.m===m.id&&S.route.s)||m.sub[0])}else go(m.id)}},
    h("span",{html:null}),h("span",{class:"lbl"},m.label),m.sub?h("span",{class:"chev lbl",html:null}):null));
   const b=li.firstChild;b.firstChild.replaceWith(icon(m.icon));if(m.sub)b.lastChild.appendChild(icon("chev",16));
-  if(m.sub){const subs=h("div",{class:"subs"});m.sub.forEach(s=>{if(m.id==="set"&&s==="Sicurezza"&&S.ro)return;subs.appendChild(h("button",{class:"sl","data-m":m.id,"data-s":s,onclick:()=>go(m.id,s)},s))});li.appendChild(subs)}
+  if(m.sub){const subs=h("div",{class:"subs"});m.sub.forEach(s=>{if(!subOk(m.id,s))return;subs.appendChild(h("button",{class:"sl","data-m":m.id,"data-s":s,onclick:()=>go(m.id,s)},s))});li.appendChild(subs)}
   nav.appendChild(li)});
  const tg=h("li",{},h("button",{class:"mi",onclick:()=>root.classList.toggle("mini"),"aria-label":"Comprimi menu"},icon("menu",18),h("span",{class:"lbl"},"Comprimi")));nav.appendChild(tg);
  const sb=h("nav",{class:"sb","aria-label":"Menu"},h("div",{class:"brand"},h("img",{src:"icons/icon.svg",alt:"",width:36,height:36,style:"border-radius:10px;flex:none"}),h("b",{},"Fusball")),nav);
@@ -438,6 +448,7 @@ function buildShell(){
  BNAV.forEach(([id,l,i])=>bn.appendChild(h("button",{"data-b":id,onclick:()=>go(id)},icon(i,22),l)));
  root.append(sb,main,bn);st.appendChild(root);
  const de=document.documentElement;loadPalette(de);if(!de.dataset.pb){de.dataset.pb=1;bindAspetto(de)}de.classList.toggle("dark",!!LS.get("fusball_dark",false))}
+function subOk(m,s){if(m!=="set")return true;if(s==="Sicurezza")return !S.ro&&!!S.token;if(s==="Utenti")return can("utenti");return true}
 function go(m,s){S.route={m,s:s||null};if(m==="stat")S.statSub=s||S.statSub;render()}
 function markNav(){
  root.querySelectorAll("[data-m]").forEach(b=>b.classList.toggle("on",b.dataset.m===S.route.m&&!b.dataset.s));
@@ -455,7 +466,8 @@ function render(keepScroll){
  if(!main)return;const y=main.scrollTop;clear(main);
  const r=S.route,t=TITLES[r.m]||TITLES.home;
  const tools=h("div",{class:"tools"},statusChip(),
-  S.ro?h("button",{class:"btn sec sm",onclick:()=>{LS.del("fusball_ro");showLogin()}},icon("logout",16),"Entra col PIN"):h("button",{class:"btn w",onclick:()=>go("nuova"),"aria-label":"Nuova partita"},icon("plus",18),"Nuova partita"));
+  S.profilo&&!S.ro?h("span",{class:"chip ro"},S.profilo.nome+" · "+(GRUPPI[S.profilo.gruppo]||S.profilo.gruppo)):null,
+  S.ro?h("button",{class:"btn sec sm",onclick:()=>{LS.del("fusball_ro");showLogin()}},icon("logout",16),"Accedi"):h("button",{class:"btn","data-n":"partite",onclick:()=>go("nuova"),"aria-label":"Nuova partita"},icon("plus",18),"Nuova partita"));
  main.appendChild(h("div",{class:"head"},h("div",{},h("h2",{},t[0]),(r.s||t[1])?h("p",{},r.s||t[1]):null),tools));
  if(S.noData){main.appendChild(h("div",{class:"card"},h("h4",{},"Serve la connessione al primo avvio"),h("p",{class:"muted"},"Collegati a internet e riapri l'app: i dati vengono salvati sul dispositivo per l'uso offline."),h("div",{style:"margin-top:12px"},h("button",{class:"btn",onclick:async()=>{S.noData=false;await refresh();render()}},"Riprova"))));markNav();return}
  try{({home:vHome,gioc:vGioc,stor:vStor,stat:vStat,set:vSet,nuova:vNuova})[r.m](main)}catch(e){logEv("errore","render "+r.m+": "+e.message);main.appendChild(h("div",{class:"card err"},"Errore di visualizzazione: "+e.message))}
@@ -471,9 +483,9 @@ function vHome(m){
  const lead=Object.keys(E.r).sort((a,b)=>E.r[b]-E.r[a])[0];
  const pairs=Object.keys(C).filter(k=>C[k].g>=CFG.MIN_COPPIA_PARTITE).sort((a,b)=>pctOf(C[b])-pctOf(C[a])||C[b].g-C[a].g);
  const live=LS.get("fusball_live",null);
- if(live&&!S.ro)m.appendChild(h("div",{class:"card w"},h("h4",{},"Partita in corso"),h("p",{class:"muted",style:"margin-bottom:12px"},live.A.map(snm).join(" + ")+"  "+goals(live.seq,"A")+"-"+goals(live.seq,"B")+"  "+live.B.map(snm).join(" + ")),h("button",{class:"btn",onclick:()=>resumeLive(live)},"Riprendi partita in corso")));
+ if(live&&can("partite"))m.appendChild(h("div",{class:"card"},h("h4",{},"Partita in corso"),h("p",{class:"muted",style:"margin-bottom:12px"},live.A.map(snm).join(" + ")+"  "+goals(live.seq,"A")+"-"+goals(live.seq,"B")+"  "+live.B.map(snm).join(" + ")),h("button",{class:"btn",onclick:()=>resumeLive(live)},"Riprendi partita in corso")));
  const lastB=LS.get("fusball_backup",0);
- if(!S.ro&&ms.length&&Date.now()-lastB>CFG.BACKUP_PROMEMORIA_GIORNI*864e5)m.appendChild(h("p",{class:"muted w",style:"margin-bottom:12px"},"Backup non recente: ",h("a",{href:"#",style:"color:var(--act)",onclick:e=>{e.preventDefault();go("set","Esporta")}},"scarica una copia dei dati")));
+ if(can("utenti")&&ms.length&&Date.now()-lastB>CFG.BACKUP_PROMEMORIA_GIORNI*864e5)m.appendChild(h("p",{class:"muted",style:"margin-bottom:12px"},"Backup non recente: ",h("a",{href:"#",style:"color:var(--act)",onclick:e=>{e.preventDefault();go("set","Esporta")}},"scarica una copia dei dati")));
  m.appendChild(h("div",{class:"kpis"},
   h("div",{class:"card"},h("span",{},"Partite"),h("b",{},String(ms.length)),h("em",{},trend(mc.length,pc.length))),
   h("div",{class:"card"},h("span",{},"Gol totali"),h("b",{},String(gol(ms))),h("em",{},trend(gol(mc),gol(pc)))),
@@ -510,7 +522,7 @@ function sfidaCard(E,C){
  c.append(h("div",{class:"row"},h("b",{class:"sideA"},s.A.map(nm).join(" + ")),h("span",{class:"badge"},pA+"%")),
   h("div",{class:"row"},h("b",{class:"sideB"},s.B.map(nm).join(" + ")),h("span",{class:"badge"},(100-pA)+"%")),
   h("p",{class:"muted"},"Probabilità di vittoria stimate da ELO"));
- c.appendChild(h("div",{class:"formrow w",style:"margin-top:12px"},h("button",{class:"btn",onclick:()=>{S.setup=Object.assign(newSetup(),{slots:[nm(s.A[0]),nm(s.A[1]),nm(s.B[0]),nm(s.B[1])]});go("nuova")}},"Gioca questa sfida"),h("button",{class:"btn sec",onclick:()=>{S.sfida=i+1;render(true)}},"Un'altra")));
+ c.appendChild(h("div",{class:"formrow","data-n":"partite",style:"margin-top:12px"},h("button",{class:"btn",onclick:()=>{S.setup=Object.assign(newSetup(),{slots:[nm(s.A[0]),nm(s.A[1]),nm(s.B[0]),nm(s.B[1])]});go("nuova")}},"Gioca questa sfida"),h("button",{class:"btn sec",onclick:()=>{S.sfida=i+1;render(true)}},"Un'altra")));
  return c}
 function monthsList(ms){const s=new Set(ms.map(x=>ymRome(x.t)));s.add(ymRome(Date.now()));return[...s].sort().reverse()}
 function podioCard(ms){
@@ -531,7 +543,7 @@ function podioCard(ms){
 /* ===================== Giocatori ===================== */
 function vGioc(m){
  const ms=act(),E=calcElo(ms),{P,C}=stats(ms),B=calcBadges(ms,P);
- m.appendChild(h("div",{class:"card w"},h("h4",{},"Aggiungi giocatore"),h("div",{class:"formrow"},
+ m.appendChild(h("div",{class:"card","data-n":"giocatori"},h("h4",{},"Aggiungi giocatore"),h("div",{class:"formrow"},
   h("label",{class:"field"},"Nome",h("input",{id:"gn",autocomplete:"off"})),h("label",{class:"field"},"Cognome",h("input",{id:"gc",autocomplete:"off"})),h("label",{class:"field"},"Soprannome (facoltativo)",h("input",{id:"gs",autocomplete:"off"})),
   h("button",{class:"btn",onclick:async()=>{const n=$("#gn").value.trim(),c=$("#gc").value.trim(),s=$("#gs").value.trim(),e=$("#gerr");
    if(!n||!c){e.textContent="Inserisci nome e cognome";return}e.textContent="";
@@ -554,7 +566,7 @@ function schedaGiocatore(k,E,P,C,B){
   kv("Partite / vinte / perse",o.g+" / "+o.v+" / "+o.p),kv("Percentuale vittorie",pctOf(o)+"%"),kv("Miglior serie",String(o.best)),kv("Serie in corso",String(o.cur)),kv("ELO",String(Math.round(eloOf(E,k)))),kv("Gol fatti / subiti",o.gf+" / "+o.gs),
   kv("Miglior compagno",bw?nm(bw.best)+" ("+bw.bp+"%)":"servono "+CFG.MIN_COPPIA_PARTITE+" partite in coppia"),kv("Peggior compagno",bw&&bw.worst?nm(bw.worst)+" ("+bw.wp+"%)":"-"),
   h("div",{style:"margin-top:10px"},[...(B[k]||[])].map(b=>h("span",{class:"badge"},BADGES.find(x=>x[0]===b)[1]))),
-  h("div",{class:"acts"},!S.ro?h("button",{class:"btn sec w",onclick:()=>editGiocatore(k)},"Modifica"):null,!S.ro?h("button",{class:"btn sec w",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
+  h("div",{class:"acts"},can("giocatori")?h("button",{class:"btn sec",onclick:()=>editGiocatore(k)},"Modifica"):null,can("giocatori")?h("button",{class:"btn sec",onclick:async()=>{await enqueue({tipo:"attivo",key:k,v:!p.attivo});closeModal();render(true)}},p.attivo?"Disattiva":"Riattiva"):null,h("button",{class:"btn",onclick:closeModal},"Chiudi"))))}
 function editGiocatore(k){
  const p=S.pl[k],n=h("input",{value:p.nome,autocomplete:"off","aria-label":"Nome"}),c=h("input",{value:p.cognome,autocomplete:"off","aria-label":"Cognome"}),s=h("input",{value:p.sopr||"",autocomplete:"off","aria-label":"Soprannome"}),e=h("div",{class:"err"});
  modal(h("div",{},h("h3",{},"Modifica giocatore"),h("div",{class:"stack"},h("label",{class:"field"},"Nome",n),h("label",{class:"field"},"Cognome",c),h("label",{class:"field"},"Soprannome (facoltativo)",s)),e,
@@ -582,11 +594,11 @@ function vStor(m){
   if(!list.length)box.appendChild(h("div",{class:"card muted"},"Nessuna partita"));
   list.forEach(x=>{
    const c=h("div",{class:"card mc"+(x.el?" del":"")},
-    h("div",{class:"d"},h("span",{},fmtD(x.t)+(x.coda?" · da sincronizzare":"")+(x.el?" · annullata":"")),h("span",{},rule(x)+" · "+Math.max(1,Math.round(x.dur/60))+" min")),
-    h("div",{class:"t sideA"+(x.ga>x.gb?" w":"")},h("span",{},x.A.map(nm).join(" + ")),h("b",{},String(x.ga))),
-    h("div",{class:"t sideB"+(x.gb>x.ga?" w":"")},h("span",{},x.B.map(nm).join(" + ")),h("b",{},String(x.gb))),
+    h("div",{class:"d"},h("span",{},fmtD(x.t)+(x.aut?" · "+x.aut:"")+(x.coda?" · da sincronizzare":"")+(x.el?" · annullata":"")),h("span",{},rule(x)+" · "+Math.max(1,Math.round(x.dur/60))+" min")),
+    h("div",{class:"t sideA"+(x.ga>x.gb?" win":"")},h("span",{},x.A.map(nm).join(" + ")),h("b",{},String(x.ga))),
+    h("div",{class:"t sideB"+(x.gb>x.ga?" win":"")},h("span",{},x.B.map(nm).join(" + ")),h("b",{},String(x.gb))),
     h("div",{class:"ex"},h("button",{class:"btn sec sm",onclick:e=>{e.stopPropagation();shareImg(x)}},icon("share",16),"Condividi"),
-     !S.ro?[h("button",{class:"btn sec sm",onclick:e=>{e.stopPropagation();editMatch(x)}},"Modifica"),
+     canCorreggi(x)?[h("button",{class:"btn sec sm",onclick:e=>{e.stopPropagation();editMatch(x)}},"Modifica"),
       x.el?h("button",{class:"btn sec sm",onclick:async e=>{e.stopPropagation();await enqueue({tipo:"annulla",cid:x.cid,v:false});render(true)}},"Ripristina"):h("button",{class:"btn danger sm",onclick:async e=>{e.stopPropagation();if(await ask("Annullare la partita?","Non entrerà più nelle statistiche. Si può ripristinare.","Annulla partita",true)){await enqueue({tipo:"annulla",cid:x.cid,v:true});render(true)}}},"Annulla partita")]:null));
    c.addEventListener("click",()=>c.classList.toggle("open"));box.appendChild(c)})}
  draw()}
@@ -662,7 +674,7 @@ function resolveName(s){s=s.trim().replace(/\s+/g," ");if(!s)return null;
  const i=s.indexOf(" ");if(i<0)return null;const n=s.slice(0,i),c=s.slice(i+1);return{nome:n,cognome:c,key:pk(n,c)}}
 function chips(vals,get,set,fmt){const c=h("div",{class:"chips"});const draw=()=>{clear(c);vals.forEach(v=>c.appendChild(h("button",{class:get()===v?"on":"",onclick:()=>{set(v);draw()}},fmt(v))))};draw();return c}
 function vNuova(m){
- if(S.ro){m.appendChild(h("div",{class:"card"},"Sei in sola lettura: entra con il PIN per giocare."));return}
+ if(!can("partite")){m.appendChild(h("div",{class:"card"},"Il tuo profilo non può avviare partite."));return}
  const st=S.setup,inputs=[];
  const hint=h("div",{class:"muted",style:"margin-bottom:12px"});
  const upd=()=>{const nw=st.slots.map(resolveName).filter(r=>r&&!S.pl[r.key]);hint.textContent=nw.length?"Nuovi giocatori (salvati in automatico): "+nw.map(r=>r.nome+" "+r.cognome).join(", "):"Mentre scrivi compaiono i giocatori salvati";bal.disabled=rnd0.disabled=st.slots.map(resolveName).filter(Boolean).length<4};
@@ -784,11 +796,11 @@ function bindAspetto(r){
  r.addEventListener("input",e=>{if(e.target.id!=="hue")return;const hh=+e.target.value;applyPalette(r,hh,80);savePalette(hh,80)})}
 
 function vSet(m){
- const subs=MENU[4].sub.filter(s=>!(S.ro&&s==="Sicurezza"));const sub=subs.includes(S.route.s)?S.route.s:subs[0];S.route.s=sub;
+ const subs=MENU[4].sub.filter(s=>subOk("set",s));const sub=subs.includes(S.route.s)?S.route.s:subs[0];S.route.s=sub;
  m.appendChild(h("div",{class:"seg"},subs.map(s=>h("button",{class:s===sub?"on":"",onclick:()=>go("set",s)},s))));
- const V={Aspetto:setAspetto,Generali:setGenerali,Sincronizzazione:setSync,Esporta:setEsporta,Sicurezza:setSicurezza,Credits:setCredits,Log:setLog,Help:setHelp,Changelog:setChangelog};
+ const V={Aspetto:setAspetto,Generali:setGenerali,Sincronizzazione:setSync,Esporta:setEsporta,Sicurezza:setSicurezza,Utenti:setUtenti,Credits:setCredits,Log:setLog,Help:setHelp,Changelog:setChangelog};
  V[sub](m);
- if(!S.ro&&sub==="Aspetto")m.appendChild(h("div",{class:"card"},h("h4",{},"Sessione"),h("button",{class:"btn sec",onclick:esci},icon("logout",16),"Esci")))}
+ if(S.token&&!S.ro&&sub==="Aspetto")m.appendChild(h("div",{class:"card"},h("h4",{},"Sessione"),h("button",{class:"btn sec",onclick:esci},icon("logout",16),"Esci")))}
 function setAspetto(m){
  const box=h("div");box.innerHTML=aspetto();m.appendChild(box);
  const hr=box.querySelector("#hue");if(hr)hr.value=parseFloat(getComputedStyle(root).getPropertyValue("--h"));
@@ -840,12 +852,37 @@ function setEsporta(m){
   h("p",{class:"muted",style:"margin-top:12px"},lb?"Ultimo backup: "+fmtD(lb):"Nessun backup scaricato"+(lb&&Date.now()-lb>CFG.BACKUP_PROMEMORIA_GIORNI*864e5?"":" finora"))))}
 function setSicurezza(m){
  const v=h("input",{type:"password",inputmode:"numeric",maxlength:6,autocomplete:"off","aria-label":"PIN attuale"}),n=h("input",{type:"password",inputmode:"numeric",maxlength:6,autocomplete:"off","aria-label":"Nuovo PIN"}),msg=h("div");
- m.appendChild(h("div",{class:"card w"},h("h4",{},"Cambia PIN"),h("div",{class:"formrow"},h("label",{class:"field"},"PIN attuale",v),h("label",{class:"field"},"Nuovo PIN (4-6 cifre)",n),h("button",{class:"btn",onclick:async()=>{
+ m.appendChild(h("div",{class:"card","data-n":"login"},h("h4",{},"Cambia PIN"),h("div",{class:"formrow"},h("label",{class:"field"},"PIN attuale",v),h("label",{class:"field"},"Nuovo PIN (4-6 cifre)",n),h("button",{class:"btn",onclick:async()=>{
   msg.className="err";msg.textContent="";if(!/^[0-9]{4,6}$/.test(n.value)){msg.textContent="Il nuovo PIN deve avere da 4 a 6 cifre";return}
   try{const ok=await rpc("cambia_pin",{p_token:S.token,p_vecchio:v.value,p_nuovo:n.value});if(ok){msg.className="okmsg";msg.textContent="PIN cambiato";v.value=n.value="";logEv("accesso","PIN cambiato")}else msg.textContent="PIN attuale errato"}
-  catch(e){msg.textContent=e.net?"Serve la connessione":e.code==="non_autorizzato"?"Sessione scaduta, rientra col PIN":"Errore: "+e.message}}},"Cambia")),msg));
- m.appendChild(h("div",{class:"card w"},h("h4",{},"Esci da tutti i dispositivi"),h("p",{class:"muted",style:"margin-bottom:12px"},"Chiude tutte le sessioni: ogni dispositivo dovrà reinserire il PIN."),h("button",{class:"btn danger",onclick:async()=>{if(!await ask("Uscire da tutti i dispositivi?","Dovrai rientrare col PIN anche qui.","Esci ovunque",true))return;
-  try{await rpc("logout_tutti",{p_token:S.token});S.token=null;LS.del("fusball_token");logEv("accesso","logout da tutti i dispositivi");showLogin()}catch(e){toast(e.net?"Serve la connessione":"Errore: "+e.message,"err")}}},"Esci da tutti")))}
+  catch(e){if(!authErr(e))msg.textContent=errMsg(e)}}},"Cambia")),msg));
+ m.appendChild(h("div",{class:"card","data-n":"utenti"},h("h4",{},"Esci da tutti i dispositivi"),h("p",{class:"muted",style:"margin-bottom:12px"},"Chiude tutte le sessioni: ogni dispositivo dovrà reinserire il PIN."),h("button",{class:"btn danger",onclick:async()=>{if(!await ask("Uscire da tutti i dispositivi?","Dovrai rientrare col PIN anche qui.","Esci ovunque",true))return;
+  try{await rpc("logout_tutti",{p_token:S.token});S.token=null;LS.del("fusball_token");LS.del("fusball_profilo");S.profilo=null;logEv("accesso","logout da tutti i dispositivi");showLogin()}catch(e){if(!authErr(e))toast(errMsg(e),"err")}}},"Esci da tutti")))}
+async function setUtenti(m){
+ const box=h("div",{class:"stack"});m.appendChild(box);
+ let d;try{d=await rpc("elenco_utenti",{p_token:S.token})}catch(e){if(authErr(e))return;box.appendChild(h("div",{class:"card err"},errMsg(e)));return}
+ const call=async(name,body,ok)=>{try{await rpc(name,Object.assign({p_token:S.token},body));if(ok)toast(ok);render(true)}catch(e){if(!authErr(e))toast(errMsg(e),"err")}};
+ const ordine={admin:0,normale:1,lettura:2},gruppi=d.gruppi.slice().sort((a,b)=>(ordine[a.id]??9)-(ordine[b.id]??9));
+ const gsel=(val,on)=>h("select",{"aria-label":"Gruppo",onchange:on},gruppi.map(g=>h("option",{value:g.id,selected:g.id===val||null},g.nome)));
+ const nome=h("input",{autocomplete:"off","aria-label":"Nome"}),pin=h("input",{type:"password",inputmode:"numeric",maxlength:6,autocomplete:"new-password","aria-label":"PIN"}),gr=gsel("normale"),err=h("div",{class:"err"});
+ box.appendChild(h("div",{class:"card"},h("h4",{},"Nuovo utente"),h("div",{class:"formrow"},h("label",{class:"field"},"Nome e cognome",nome),h("label",{class:"field"},"PIN (4-6 cifre)",pin),h("label",{class:"field"},"Gruppo",gr),
+  h("button",{class:"btn",onclick:async()=>{err.textContent="";const n=nome.value.trim();if(!n){err.textContent="Inserisci il nome";return}if(!/^[0-9]{4,6}$/.test(pin.value)){err.textContent=ERR.pin_non_valido;return}
+   try{await rpc("crea_utente",{p_token:S.token,p_nome:n,p_pin:pin.value,p_gruppo:gr.value});toast("Utente creato");render(true)}catch(e){if(!authErr(e))err.textContent=errMsg(e)}}},"Crea")),err,
+  h("p",{class:"muted",style:"margin-top:8px"},"Comunica il PIN di persona: chi entra potrà poi cambiarlo da Impostazioni > Sicurezza.")));
+ const lc=h("div",{class:"card"},h("h4",{},"Utenti"));
+ d.utenti.forEach(u=>lc.appendChild(h("div",{class:"row",style:u.attivo?"":"opacity:.6"},
+  h("span",{},h("b",{},u.nome),u.attivo?null:h("span",{class:"badge warn",style:"margin-left:6px"},"disattivato")),
+  h("span",{class:"formrow",style:"gap:8px;flex-wrap:nowrap"},
+   gsel(u.gruppo,e=>call("modifica_utente",{p_id:u.id,p_gruppo:e.target.value,p_attivo:u.attivo},"Gruppo aggiornato")),
+   h("button",{class:"btn sec sm",onclick:()=>resetPin(u)},"Reimposta PIN"),
+   h("button",{class:"btn sec sm",onclick:()=>call("modifica_utente",{p_id:u.id,p_gruppo:u.gruppo,p_attivo:!u.attivo},u.attivo?"Utente disattivato":"Utente riattivato")},u.attivo?"Disattiva":"Riattiva")))));
+ box.appendChild(lc);
+ function resetPin(u){
+  const p=h("input",{type:"password",inputmode:"numeric",maxlength:6,autocomplete:"new-password","aria-label":"Nuovo PIN"}),e2=h("div",{class:"err"});
+  modal(h("div",{},h("h3",{},"Reimposta PIN di "+u.nome),h("label",{class:"field"},"Nuovo PIN (4-6 cifre)",p),e2,
+   h("div",{class:"acts"},h("button",{class:"btn sec",onclick:closeModal},"Annulla"),h("button",{class:"btn",onclick:async()=>{
+    if(!/^[0-9]{4,6}$/.test(p.value)){e2.textContent=ERR.pin_non_valido;return}
+    try{await rpc("reimposta_pin_utente",{p_token:S.token,p_id:u.id,p_pin:p.value});closeModal();toast("PIN reimpostato");render(true)}catch(e){if(!authErr(e))e2.textContent=errMsg(e)}}},"Salva"))))}}
 function setCredits(m){m.appendChild(h("div",{class:"card"},h("h4",{},"Fusball"),
  h("div",{class:"row"},h("span",{},"Versione"),h("b",{},"v"+APP_VERSION+" del "+APP_DATE)),h("div",{class:"row"},h("span",{},"Autore"),h("b",{},"Fabrizio")),
  h("div",{class:"row"},h("span",{},"Contatto"),h("a",{href:"mailto:fabriziocuozzo@gmail.com",style:"color:var(--act)"},"fabriziocuozzo@gmail.com")),
@@ -862,34 +899,40 @@ function setHelp(m){
   ["Timer","Facoltativo, 5 o 10 minuti. A fine tempo vince chi è avanti; in parità parte il golden goal e il primo gol chiude la partita."],
   ["Continua","Dopo la fine, Continua toglie l'ultimo gol e riapre la partita."],
   ["Offline","Senza rete l'app mostra l'ultimo salvataggio dei dati e mette in coda le partite: si sincronizzano da sole al ritorno online, senza duplicati."],
-  ["Ospite","Chi entra come ospite può solo guardare: partite, statistiche e badge."]]
+  ["Ospite","Chi entra come ospite, senza nome e PIN, può solo guardare: partite, statistiche e badge."],
+  ["Gruppi","Amministratore: fa tutto, compresa la gestione degli utenti. Normale: avvia e chiude le partite, mescola le squadre e può correggere o annullare la propria ultima partita entro 3 minuti dal salvataggio. Solo lettura: guarda e non modifica nulla."]]
  .forEach(([t,d])=>m.appendChild(h("div",{class:"card"},h("h4",{},t),h("p",{class:"muted",style:"line-height:1.55"},d))))}
-const CHANGELOG=[["v1.0 - 24/11/2026","Prima versione: accesso con PIN e ospite, tabellone, giocatori, storico, statistiche (persone, coppie, record, ELO, badge), sfida del giorno, squadre casuali, podio del mese, condividi risultato, export CSV/PDF/JSON, coda offline e PWA."]];
+const CHANGELOG=[["v2.0 - 25/11/2026","Accesso con nome e PIN personali. Tre gruppi di permessi: amministratore, normale e solo lettura. Nuova scheda Impostazioni > Utenti per l'amministratore. Ogni partita ricorda chi l'ha inserita. Il gruppo normale può correggere la propria ultima partita entro 3 minuti."],["v1.0 - 24/11/2026","Prima versione: accesso con PIN e ospite, tabellone, giocatori, storico, statistiche (persone, coppie, record, ELO, badge), sfida del giorno, squadre casuali, podio del mese, condividi risultato, export CSV/PDF/JSON, coda offline e PWA."]];
 function setChangelog(m){CHANGELOG.forEach(([t,d])=>m.appendChild(h("div",{class:"card"},h("h4",{},t),h("p",{class:"muted",style:"line-height:1.55"},d))))}
 
 /* ===================== accesso ===================== */
 function showLogin(msg){
- $("#login").style.display="flex";$("#pin").value="";const e=$("#pinerr");e.style.display=msg?"block":"none";e.textContent=msg||"";$("#pin").focus();if(root)root.classList.add("lock")}
+ $("#login").style.display="flex";$("#pin").value="";$("#nome").value=LS.get("fusball_nome","");const e=$("#pinerr");e.style.display=msg?"block":"none";e.textContent=msg||"";($("#nome").value?$("#pin"):$("#nome")).focus();if(root)root.classList.add("lock")}
 function hideLogin(){$("#login").style.display="none";if(root)root.classList.remove("lock")}
 async function doLogin(){
- const pin=$("#pin").value.trim(),e=$("#pinerr");e.style.display="none";
+ const nome=$("#nome").value.trim(),pin=$("#pin").value.trim(),e=$("#pinerr");e.style.display="none";
+ if(!nome){e.textContent="Inserisci il tuo nome";e.style.display="block";return}
  if(!/^[0-9]{4,6}$/.test(pin)){e.textContent="Il PIN ha da 4 a 6 cifre";e.style.display="block";return}
  $("#pinok").disabled=true;
- try{const t=await rpc("login",{p_pin:pin});
-  if(!t){e.textContent="PIN errato";e.style.display="block";logEv("accesso","PIN errato");return}
-  S.token=t;LS.set("fusball_token",t);S.ro=false;LS.del("fusball_ro");logEv("accesso","accesso con PIN");hideLogin();enter();sync()}
- catch(x){e.textContent=x.net?"Serve la connessione per entrare":x.code==="troppi_tentativi"?"Troppi tentativi, riprova tra 10 minuti":"Errore: "+x.message;e.style.display="block"}
+ try{const r=await rpc("login",{p_nome:nome,p_pin:pin});
+  if(!r){e.textContent="Nome o PIN errato";e.style.display="block";logEv("accesso","accesso fallito: "+nome);return}
+  S.token=r.token;S.profilo={nome:r.nome,gruppo:r.gruppo,permessi:r.permessi};LS.set("fusball_token",S.token);LS.set("fusball_profilo",S.profilo);LS.set("fusball_nome",r.nome);S.ro=false;LS.del("fusball_ro");logEv("accesso","accesso di "+r.nome+" ("+r.gruppo+")");hideLogin();enter();sync()}
+ catch(x){e.textContent=x.net?"Serve la connessione per entrare":errMsg(x);e.style.display="block"}
  finally{$("#pinok").disabled=false;$("#pin").value=""}}
 $("#pinok").onclick=doLogin;
 $("#pin").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 $("#guest").onclick=()=>{S.ro=true;LS.set("fusball_ro",true);hideLogin();enter()};
-function esci(){S.token=null;LS.del("fusball_token");S.ro=false;logEv("accesso","uscita");showLogin()}
-function enter(){document.body.classList.toggle("ro",S.ro);buildShell();S.route={m:"home",s:null};render();}async function boot(){
+function esci(){S.token=null;S.profilo=null;LS.del("fusball_token");LS.del("fusball_profilo");S.ro=false;logEv("accesso","uscita");showLogin()}
+function enter(){setBody();buildShell();S.route={m:"home",s:null};render();}async function refreshProfilo(){
+ try{const p=await rpc("mio_profilo",{p_token:S.token});const cambiato=JSON.stringify(p)!==JSON.stringify(S.profilo);S.profilo=p;LS.set("fusball_profilo",p);if(cambiato){setBody();if(!G){buildShell();render()}}}
+ catch(e){authErr(e)}}
+async function boot(){
  await loadQueue();await refresh();
- if(S.token){S.ro=false;enter();sync()}
+ if(S.token&&!S.profilo){S.token=null;LS.del("fusball_token")}     // sessione di v1: serve il nuovo accesso
+ if(S.token){S.ro=false;enter();refreshProfilo();sync()}
  else if(LS.get("fusball_ro",false)){S.ro=true;enter()}
  else{enter();showLogin()}
- const live=LS.get("fusball_live",null);if(live&&!S.ro&&S.token)toast("Hai una partita in corso",null,{label:"Riprendi",fn:()=>resumeLive(live)});
+ const live=LS.get("fusball_live",null);if(live&&can("partite"))toast("Hai una partita in corso",null,{label:"Riprendi",fn:()=>resumeLive(live)});
  if("serviceWorker"in navigator){navigator.serviceWorker.register("sw.js").then(reg=>{reg.addEventListener("updatefound",()=>{const w=reg.installing;w&&w.addEventListener("statechange",()=>{if(w.state==="installed"&&navigator.serviceWorker.controller)toast("Nuova versione disponibile",null,{label:"Ricarica",fn:()=>location.reload()})})})}).catch(e=>logEv("errore","service worker: "+e.message))}}
 boot();
 </script>

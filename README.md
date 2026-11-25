@@ -5,13 +5,22 @@ Calcio balilla 2 contro 2: tabellone, storico, statistiche, ELO, badge. PWA stat
 ## Setup
 
 1. **Supabase** (stesso progetto delle altre app): SQL Editor → incolla `sql/schema.sql`.
-   **Prima di eseguirlo** sostituisci `CAMBIA_IL_PIN` con un PIN di 4-6 cifre (poi cambialo dall'app: Impostazioni > Sicurezza). Non salvare il PIN reale nel repository.
+   **Prima di eseguirlo** sostituisci `CAMBIA_IL_PIN` con un PIN di 4-6 cifre. Non salvare il PIN reale nel repository.
+   Poi esegui `sql/03_utenti_gruppi.sql`: il PIN diventa quello dell'utente admin "Fabrizio Cuozzo" (da v2.0 si entra con nome e PIN). Se l'app era gia' in uso (v1.0), basta eseguire solo il 03, e poi `notify pgrst, 'reload schema';`.
 2. Supabase → Settings → API → **Exposed schemas**: aggiungi `fusball` e salva.
 3. `config.js`: contiene già URL e chiave pubblica `anon` del progetto. Mai la `service_role`.
 4. **Repository GitHub** `fusball` (pubblico) con questi file; Settings → Pages → branch `main`, cartella root.
 5. **Dominio**: record CNAME su Aruba `fusball` → `fabriziocuozzo.github.io`, poi dominio personalizzato `fusball.fccowork.it` in Pages e HTTPS attivo.
 6. **Keepalive**: repo → Settings → Secrets → Actions: `SUPABASE_URL` e `SUPABASE_ANON_KEY`. Il workflow `.github/workflows/keepalive.yml` pinga Supabase ogni giorno.
    Attenzione: GitHub disattiva i workflow programmati dei repo pubblici dopo 60 giorni senza commit. Basta un commit, oppure riattivarlo dalla scheda Actions.
+
+## Utenti e gruppi (v2.0)
+
+- Si entra con **nome e PIN**. "Entra come ospite" resta senza PIN, in sola lettura.
+- Gruppi: **Amministratore** (tutto, compresa la gestione utenti), **Normale** (avvia e chiude partite, mescola le squadre, crea giocatori dal tabellone; corregge o annulla la *propria* ultima partita entro 3 minuti), **Solo lettura**.
+- L'amministratore gestisce gli utenti da Impostazioni > Utenti. Ogni utente cambia il proprio PIN da Impostazioni > Sicurezza.
+- I permessi di ogni gruppo sono nella tabella `fusball.gruppi` (colonna `permessi`) e il database li controlla a ogni scrittura; l'interfaccia mostra solo cio' che e' consentito. La finestra di correzione e' `recente_min` del gruppo normale.
+- PIN dimenticato da un utente: l'admin lo reimposta. PIN dimenticato dall'admin: da SQL Editor, `update fusball.utenti set pin_hash = extensions.crypt('NUOVO', extensions.gen_salt('bf')) where lower(nome) = 'fabrizio cuozzo';`
 
 ## Uso
 
