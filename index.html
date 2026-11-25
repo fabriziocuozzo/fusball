@@ -228,7 +228,7 @@ body.ro .w{display:none!important}
 <body>
 <div id="stage"></div>
 <div id="login" style="display:none"><div class="box">
- <img src="icons/icon-192.png" alt="">
+ <img src="icons/icon.svg" alt="">
  <h1>Fusball</h1><p>Inserisci il PIN per segnare le partite</p>
  <input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" aria-label="PIN">
  <div class="err" id="pinerr" style="display:none"></div>
@@ -432,7 +432,7 @@ function buildShell(){
   if(m.sub){const subs=h("div",{class:"subs"});m.sub.forEach(s=>{if(m.id==="set"&&s==="Sicurezza"&&S.ro)return;subs.appendChild(h("button",{class:"sl","data-m":m.id,"data-s":s,onclick:()=>go(m.id,s)},s))});li.appendChild(subs)}
   nav.appendChild(li)});
  const tg=h("li",{},h("button",{class:"mi",onclick:()=>root.classList.toggle("mini"),"aria-label":"Comprimi menu"},icon("menu",18),h("span",{class:"lbl"},"Comprimi")));nav.appendChild(tg);
- const sb=h("nav",{class:"sb","aria-label":"Menu"},h("div",{class:"brand"},h("div",{class:"logo"},"F"),h("b",{},"Fusball")),nav);
+ const sb=h("nav",{class:"sb","aria-label":"Menu"},h("div",{class:"brand"},h("img",{src:"icons/icon.svg",alt:"",width:36,height:36,style:"border-radius:10px;flex:none"}),h("b",{},"Fusball")),nav);
  main=h("section",{class:"main"});
  const bn=h("nav",{class:"bnav","aria-label":"Menu"});
  BNAV.forEach(([id,l,i])=>bn.appendChild(h("button",{"data-b":id,onclick:()=>go(id)},icon(i,22),l)));
