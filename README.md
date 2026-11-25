@@ -22,6 +22,13 @@ Calcio balilla 2 contro 2: tabellone, storico, statistiche, ELO, badge. PWA stat
 - I permessi di ogni gruppo sono nella tabella `fusball.gruppi` (colonna `permessi`) e il database li controlla a ogni scrittura; l'interfaccia mostra solo cio' che e' consentito. La finestra di correzione e' `recente_min` del gruppo normale.
 - PIN dimenticato da un utente: l'admin lo reimposta. PIN dimenticato dall'admin: da SQL Editor, `update fusball.utenti set pin_hash = extensions.crypt('NUOVO', extensions.gen_salt('bf')) where lower(nome) = 'fabrizio cuozzo';`
 
+## Marcatori, ruoli e autogol (v3.0)
+
+- In Nuova partita la riga 1 di ogni squadra e' il portiere (P), la riga 2 l'attaccante (A). Il pulsante Scambia (e il ⇄ sul tabellone) li scambia anche in partita.
+- Sul tabellone ogni quadrato e' diviso in due meta', una per giocatore: un tocco = gol di quel giocatore. AG = autogol (punto agli avversari, attribuito a chi lo ha fatto).
+- Il gol e' del giocatore a prescindere dal ruolo; il ruolo serve per le statistiche (Statistiche > Marcatori).
+- Database: `sql/04_marcatori.sql` aggiunge `partite.marcatori` e `partite_giocatori.pos`. Va eseguito prima di pubblicare l'app v3.0.
+
 ## Uso
 
 - PIN → scrive. "Entra come ospite" → sola lettura, stesso link.
