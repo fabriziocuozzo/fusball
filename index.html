@@ -121,6 +121,13 @@ input[type=range]{padding:0;border:0;height:auto;accent-color:var(--ac)}
 .slot{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .team .slot:last-child{margin-bottom:0}
 .team .slot input{width:auto;flex:1;margin:0}
+.team .slot:nth-last-child(2){margin-bottom:0}
+.sugg{border:1px solid var(--line);border-radius:12px;background:var(--card);max-height:264px;overflow:auto;margin:0 0 8px 42px;box-shadow:0 8px 24px rgba(15,23,42,.14)}
+.sugg button{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;font-size:15px;border-bottom:1px solid var(--line)}
+.sugg button:last-child{border-bottom:0}
+.sugg button:hover,.sugg button.sel{background:var(--acs)}
+.sugg em{font-style:normal;color:var(--muted);font-size:13px}
+.sugg .vuoto{padding:10px 12px;color:var(--muted);font-size:13px}
 .ruolo{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:var(--acs);color:var(--act);flex:none}
 .team h4{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .sideA{color:var(--blu)}.sideB{color:var(--ros)}
@@ -707,6 +714,34 @@ function vElo(m,all,ms){
 function resolveName(s){s=s.trim().replace(/\s+/g," ");if(!s)return null;
  const k=s.toLowerCase();if(S.pl[k])return{nome:S.pl[k].nome,cognome:S.pl[k].cognome,key:k};
  const i=s.indexOf(" ");if(i<0)return null;const n=s.slice(0,i),c=s.slice(i+1);return{nome:n,cognome:c,key:pk(n,c)}}
+/* ===== autocompletamento dei giocatori (uguale su tutti i dispositivi) ===== */
+function suggerimenti(q,esclusi){
+ const pres=new Set(LS.get("fusball_presenti",[])),parole=q.toLowerCase().split(/\s+/).filter(Boolean);
+ return Object.keys(S.pl).filter(k=>S.pl[k].attivo&&!esclusi.has(k)).filter(k=>{const t=k+" "+(S.pl[k].sopr||"").toLowerCase();return parole.every(w=>t.includes(w))})
+  .sort((a,b)=>(pres.has(b)-pres.has(a))||nm(a).localeCompare(nm(b))).map(k=>({k,pres:pres.has(k)}))}
+function autocompleta(inp,box,ix,st,inputs,upd){
+ let voci=[],sel=-1;
+ const chiudi=()=>{box.style.display="none";sel=-1};
+ const avanti=()=>{const pr=[1,2,3].map(d=>(ix+d)%4).find(i=>!st.slots[i].trim());if(pr!==undefined)inputs[pr].focus();else inp.blur()};
+ const scegli=k=>{st.slots[ix]=nm(k);inp.value=st.slots[ix];upd();chiudi();avanti()};
+ const disegna=()=>{clear(box);
+  const esclusi=new Set(st.slots.filter((_,i)=>i!==ix).map(resolveName).filter(Boolean).map(r=>r.key));   // chi e' gia' in campo non si ripete
+  const v=inp.value.trim(),completo=!!S.pl[v.toLowerCase()];
+  voci=suggerimenti(completo?"":v,esclusi);if(sel>=voci.length)sel=voci.length-1;
+  voci.forEach((x,i)=>box.appendChild(h("button",{type:"button",tabindex:"-1",class:i===sel?"sel":"",onclick:()=>scegli(x.k)},
+   h("span",{},nm(x.k),S.pl[x.k].sopr?h("em",{}," «"+S.pl[x.k].sopr+"»"):null),x.pres?h("span",{class:"badge ok"},"presente"):null)));
+  if(!voci.length)box.appendChild(h("div",{class:"vuoto"},v?"Nessun giocatore trovato. Se è nuovo scrivi nome e cognome: verrà creato al salvataggio":"Nessun giocatore disponibile"));
+  box.style.display="block"};
+ box.addEventListener("mousedown",e=>e.preventDefault());      // il campo non perde il fuoco quando si tocca l'elenco
+ inp.addEventListener("focus",()=>{sel=-1;disegna();if(innerWidth<600)setTimeout(()=>inp.scrollIntoView({block:"start",behavior:"smooth"}),50)});
+ inp.addEventListener("click",()=>{if(box.style.display==="none")disegna()});
+ inp.addEventListener("input",()=>{sel=-1;disegna()});
+ inp.addEventListener("blur",chiudi);
+ inp.addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){if(!voci.length)return;e.preventDefault();sel=sel<0?(e.key==="ArrowDown"?0:voci.length-1):(sel+(e.key==="ArrowDown"?1:-1)+voci.length)%voci.length;disegna();box.children[sel].scrollIntoView({block:"nearest"})}
+  else if(e.key==="Enter"){e.preventDefault();const v=inp.value.trim();
+   if(sel>=0&&voci[sel])scegli(voci[sel].k);else if(v&&voci.length&&!v.includes(" "))scegli(voci[0].k);else{chiudi();avanti()}}
+  else if(e.key==="Escape")chiudi()})}
 function chips(vals,get,set,fmt){const c=h("div",{class:"chips"});const draw=()=>{clear(c);vals.forEach(v=>c.appendChild(h("button",{class:get()===v?"on":"",onclick:()=>{set(v);draw()}},fmt(v))))};draw();return c}
 function vNuova(m){
  if(!can("partite")){m.appendChild(h("div",{class:"card"},"Il tuo profilo non può avviare partite."));return}
@@ -715,7 +750,7 @@ function vNuova(m){
  const upd=()=>{const nw=st.slots.map(resolveName).filter(r=>r&&!S.pl[r.key]);hint.textContent=nw.length?"Nuovi giocatori (salvati in automatico): "+nw.map(r=>r.nome+" "+r.cognome).join(", "):"P portiere, A attaccante: i ruoli si scambiano anche durante la partita";bal.disabled=rnd0.disabled=st.slots.map(resolveName).filter(Boolean).length<4};
  [["A","Squadra A (blu)",0],["B","Squadra B (rossa)",2]].forEach(([t,l,o])=>{
   const tm=h("div",{class:"team "+t},h("h4",{},h("span",{},l),h("button",{class:"btn sec sm",type:"button","aria-label":"Scambia portiere e attaccante",onclick:()=>{[st.slots[o],st.slots[o+1]]=[st.slots[o+1],st.slots[o]];inputs[o].value=st.slots[o];inputs[o+1].value=st.slots[o+1];upd()}},"⇄ Scambia")));
-  for(let i=0;i<2;i++){const ix=o+i;const inp=h("input",{list:"pl",placeholder:i?"Attaccante: nome e cognome":"Portiere: nome e cognome","aria-label":l+(i?" attaccante":" portiere"),value:st.slots[ix],autocomplete:"off",oninput:e=>{st.slots[ix]=e.target.value;upd()}});inputs.push(inp);tm.appendChild(h("div",{class:"slot"},h("span",{class:"ruolo",title:i?"Attaccante":"Portiere"},i?"A":"P"),inp))}
+  for(let i=0;i<2;i++){const ix=o+i;const sug=h("div",{class:"sugg",style:"display:none"});const inp=h("input",{placeholder:i?"Attaccante: nome e cognome":"Portiere: nome e cognome","aria-label":l+(i?" attaccante":" portiere"),value:st.slots[ix],autocomplete:"off",oninput:e=>{st.slots[ix]=e.target.value;upd()}});inputs.push(inp);autocompleta(inp,sug,ix,st,inputs,()=>upd());tm.append(h("div",{class:"slot"},h("span",{class:"ruolo",title:i?"Attaccante":"Portiere"},i?"A":"P"),inp),sug)}
   m.appendChild(tm)});
  const mix=fn=>{const r=st.slots.map(resolveName);if(r.some(x=>!x))return;const sel=fn(r.map(x=>x.key));st.slots=sel.map(nm);inputs.forEach((e,i)=>e.value=st.slots[i]);upd()};
  const rnd0=h("button",{class:"btn sec",onclick:()=>mix(k=>shuffle(k))},"Mescola a caso");
